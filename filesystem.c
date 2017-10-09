@@ -61,7 +61,7 @@ void filesystem(char *file)
 	//checkFAT(filesystem);
 	
 	//printf("%p \n", filesystem -> map);
-	//printf("%p \n", filesystem -> writeTo);
+	//printf("%p \n", filesystem -> writeo);
 	//printf("%ld \n", sizeof(struct FAT));
 	//printf("%d \n");
 	
@@ -203,18 +203,132 @@ void filesystem(char *file)
 
 }
 
+
+void reformulate (struct FileSystem* filesystem) {
+  if(filesystem->currentDirectory->childDir){
+    struct DirectoryPage* temp=filesystem->currentDirectory->childDir;
+    while(temp->nextDir){
+      if(temp->nextDir->size==0){
+	if(temp->nextDir->nextDir){
+	  temp->nextDir=temp->nextDir->nextDir;
+	}
+	else{
+	  temp->nextDir=NULL;
+	}
+      }
+    }
+  }
+}
+
 void rm(struct FileSystem* filesystem, char* filename){
   if(filesystem->currentDirectory->childDir){
     struct DirectoryPage* temp=filesystem->currentDirectory->childDir;
-    //if(strncmp(temp->name, filename)!=0){
-    while(strcmp(temp->name,filename)!=0){
-      if(temp->nextDir)
-	temp=temp->nextDir;
-      else
-	break;
-    }
+    if(strcmp(temp->name, filename) == 0) {
+      int childsize=temp->size;
+      
+      int childpos=temp->index;
+      if(temp->nextDir){
+	filesystem->currentDirectory->childDir=temp->nextDir;
 
-    if(!temp->isfile && strcmp(temp->name,filename)==0){
+
+
+      }
+      else{
+	filesystem->currentDirectory->childDir=NULL;
+      }
+      unsigned char* bytes=filesystem->map+512*childpos; 
+
+
+      filesystem->rootSec->currenttableposition=childpos;
+      memset(bytes, 0x00, 512*childsize);
+      filesystem->writeTo=&bytes[0];
+    }
+    else{
+      struct DirectoryPage* temp=filesystem->currentDirectory->childDir;
+      /*      if(strcmp(temp->name, filename) == 0) {
+	int childsize=temp->size;
+
+	int childpos=temp->index;
+	unsigned char* bytes=filesystem->map+512*childpos;
+
+
+	filesystem->rootSec->currenttableposition=childpos;
+	memset(bytes, 0x00, 512*childsize);
+	filesystem->writeTo=&bytes[0];
+
+      }
+      else{*/
+      while(temp){
+      if(temp->nextDir){
+	if(strcmp(temp->nextDir->name, filename) == 0){
+	  int nextpos=temp->nextDir->index;
+	  int nextsize=temp->nextDir->size;
+	  if(temp->nextDir->nextDir){
+	    temp->nextDir=temp->nextDir->nextDir;
+	  }
+	  else{
+	    temp->nextDir=NULL;
+	  }
+	  unsigned char* bytes=filesystem->map+512*nextpos;
+	  filesystem->rootSec->currenttableposition=nextpos;
+	  memset(bytes, 0x00, 512*nextsize);
+	  filesystem->writeTo=&bytes[0];
+
+	}
+	
+	//temp=temp->nextDir;
+	  
+      }
+      else{
+      if(strcmp(temp->name, filename) == 0) {
+	int childsize=temp->size;
+
+	int childpos=temp->index;
+	unsigned char* bytes=filesystem->map+512*childpos;
+
+
+	filesystem->rootSec->currenttableposition=childpos;
+	memset(bytes, 0x00, 512*childsize);
+	filesystem->writeTo=&bytes[0];
+
+      }
+      }
+      temp=temp->nextDir;
+
+
+      }
+      //if (temp->nextDir==NULL){
+      /*if(strcmp(temp->name, filename) == 0) {
+	  int childsize=temp->size;
+
+	  int childpos=temp->index;
+	  unsigned char* bytes=filesystem->map+512*childpos;
+
+
+	  filesystem->rootSec->currenttableposition=childpos;
+	  memset(bytes, 0x00, 512*childsize);
+	  filesystem->writeTo=&bytes[0];
+
+	  }*/
+	//	    }
+    }
+	       
+
+
+  }
+
+
+
+}
+
+
+
+
+     
+
+  
+
+  /* if(!temp->isfile && strcmp(temp->name,filename)==0){
       printf("%s is a directory\n", filename);
     }
 
@@ -224,8 +338,8 @@ void rm(struct FileSystem* filesystem, char* filename){
 
     else{
       // dump(stdout, temp->index, filesystem);
-       int j=temp->index;
-       int i=temp->index;
+        int j=temp->index;
+      // int i=temp->index;
        if(temp->parent->childDir==temp){
 	 if(temp->nextDir){
 	   temp->parent->childDir=temp->nextDir;
@@ -236,20 +350,21 @@ void rm(struct FileSystem* filesystem, char* filename){
        }
        
       //while(i<temp->index+temp->size){
-	unsigned char* bytes = filesystem->map+512*(i);
+	unsigned char* bytes = filesystem->map+512*(temp->index);
 	temp->parent=NULL;
 	
 	memset(bytes, 0x00, 512*temp->size);
 	filesystem->writeTo=&bytes[0];
 	filesystem->rootSec->currenttableposition=j;
-        	
-	//i=i+1;
-	// }
-      
-    }
+	//  reformulate(filesystem);	
 
-  }
-}
+
+      
+    }*/
+
+
+
+
 
 void cat(struct FileSystem* filesystem, char* filename){
   
@@ -298,9 +413,30 @@ void cat(struct FileSystem* filesystem, char* filename){
   }
 }
 
+int checkWriteTo(struct FileSystem* filesystem){
+  unsigned char* bytes=filesystem->writeTo;
+  int isfilled=0;
+  int i=0;
+  while(i<512){
+    if((unsigned)bytes[i]!=0){
+      isfilled=1;
+      break;
+    }
+    i++;
+
+  }
+  return isfilled;
+}
+
 void myWrite(struct FileSystem* filesystem, char* filename, size_t amt, char* data){
  
- 
+   while(checkWriteTo(filesystem)) {
+    filesystem->writeTo+=512;
+    filesystem -> rootSec -> currenttableposition+=1;
+    //filesystem=SequentialFATentry(filesystem, NULL, NULL, 1);
+    }
+
+   
     struct DirectoryPage* newchild=filesystem->writeTo; 
  
     unsigned short filestartpos=filesystem->rootSec->currenttableposition;
@@ -440,6 +576,21 @@ void dump(FILE* file, int fileno, struct FileSystem* filesystem){
 	printf("\n");
 }
 
+/*int checkWriteTo(struct FileSystem* filesystem){
+  unsigned char* bytes=filesystem->writeTo;
+  int isfilled=0;
+  int i=0;
+  while(i<512){
+    if((unsigned)bytes[i]!=0){
+      isfilled=1;
+      break;
+    }
+    i++;
+
+  }
+  return isfilled;
+  }*/
+
 /*void pwd(struct FileSystem* filesystem){
 	
 	 BEGIN STACK IMPLEMENTATION
@@ -520,6 +671,7 @@ void cd(char* dirname, struct FileSystem* filesystem){
 	}
 
 }
+
 
 void ls(struct FileSystem* filesystem){
 	if(filesystem -> currentDirectory -> childDir){
